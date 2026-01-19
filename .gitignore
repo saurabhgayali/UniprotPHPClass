@@ -44,4 +44,10 @@ web/entry_test.php
 web/index.php
 web/mapping_test.php
 web/search_test.php
+web/search_async.html
+web/search_api.php
 DISTRIBUTION.md
+COMMIT_SUMMARY.md
+DOCUMENTATION_UPDATE_SUMMARY.md
+test_pagination_optimization.php
+PAGINATION_OPTIMIZATION.md

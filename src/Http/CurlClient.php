@@ -66,6 +66,17 @@ class CurlClient implements HttpClientInterface
         try {
             $this->configureCurl($curl, $url, $headers);
             
+            // Capture response headers
+            $responseHeaders = [];
+            curl_setopt($curl, CURLOPT_HEADERFUNCTION, function($curl, $header) use (&$responseHeaders) {
+                $len = strlen($header);
+                if (strpos($header, ':') !== false) {
+                    [$name, $value] = explode(':', $header, 2);
+                    $responseHeaders[strtolower(trim($name))] = trim($value);
+                }
+                return $len;
+            });
+            
             $response = curl_exec($curl);
             $statusCode = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
             $error = curl_error($curl);
@@ -77,7 +88,7 @@ class CurlClient implements HttpClientInterface
             return [
                 'status' => $statusCode,
                 'body' => $response,
-                'headers' => [],
+                'headers' => $responseHeaders,
             ];
         } finally {
             curl_close($curl);
@@ -151,7 +162,8 @@ class CurlClient implements HttpClientInterface
     {
         curl_setopt($curl, CURLOPT_URL, $url);
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($curl, CURLOPT_TIMEOUT, 30);
+        curl_setopt($curl, CURLOPT_TIMEOUT, 60);
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($curl, CURLOPT_FOLLOWLOCATION, false);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, self::$verifySsl);
         curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, self::$verifySsl ? 2 : 0);

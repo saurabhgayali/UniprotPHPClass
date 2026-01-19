@@ -1,23 +1,24 @@
 <?php
+declare(strict_types=1);
 
 /**
  * Example 1: Single Entry Retrieval
  * 
  * Shows how to fetch individual UniProtKB entries by accession number.
  * Demonstrates basic retrieval, field selection, and batch operations.
+ * 
+ * Run from command line: php examples/get_entry.php
  */
 
-// Include the library
-require_once dirname(__DIR__) . '/src/Exception/UniProtException.php';
-require_once dirname(__DIR__) . '/src/Http/HttpClientInterface.php';
-require_once dirname(__DIR__) . '/src/Http/CurlClient.php';
-require_once dirname(__DIR__) . '/src/Http/StreamClient.php';
-require_once dirname(__DIR__) . '/src/Http/HttpClientFactory.php';
-require_once dirname(__DIR__) . '/src/UniProt/UniProtEntry.php';
+require_once dirname(__DIR__) . '/src/autoload.php';
 
 use UniProtPHP\Http\HttpClientFactory;
+use UniProtPHP\Http\CurlClient;
 use UniProtPHP\UniProt\UniProtEntry;
 use UniProtPHP\Exception\UniProtException;
+
+// Disable SSL verification for development/testing
+CurlClient::setVerifySSL(false);
 
 echo "=== UniProt Entry Retrieval Example ===\n\n";
 

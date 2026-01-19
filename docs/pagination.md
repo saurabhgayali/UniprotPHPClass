@@ -1,6 +1,31 @@
 # Pagination
 
-Cursor-based pagination using HTTP Link headers.
+Cursor-based pagination using HTTP Link headers. Automatically retrieves ALL results, no matter how large.
+
+## Quick Start: Fetch All Results
+
+Want to retrieve **all 22,400+ human proteins**? Just iterate:
+
+```php
+$search = new UniProtSearch($httpClient);
+
+// Automatically handles ALL pagination internally
+$results = $search->search('organism_id:9606 AND reviewed:true', ['size' => 500]);
+
+$count = 0;
+foreach ($results as $entry) {
+    echo $entry['primaryAccession'] . "\n";
+    $count++;
+}
+echo "Total: $count entries\n";  // Prints 22,400+
+```
+
+**How it works behind the scenes:**
+1. First request: fetch results 1-500
+2. Library extracts cursor from `Link` header
+3. Second request: fetch results 501-1000 (using cursor)
+4. Repeats automatically until all results retrieved
+5. No manual cursor handling needed!
 
 ## How It Works
 
@@ -32,7 +57,73 @@ The SearchResults iterator:
 3. Fetches next page when needed
 4. Repeats until no more results
 
-## Manual Pagination
+## Manual Pagination for UI Display
+
+For web UIs that show paginated results (10/20/50 per page), use `getPaginatedResults()`:
+
+```php
+$search = new UniProtSearch($httpClient);
+
+// Get page 5 with 20 results per page
+// Offset starts at 0: offset = (pageNumber - 1) * pageSize
+$offset = 4 * 20;  // Page 5
+$result = $search->getPaginatedResults(
+    'organism_id:9606 AND reviewed:true',
+    $offset,   // Skip first 80 results
+    20         // Show 20 results
+);
+
+echo "Page " . $result['currentPage'] . " of " . $result['totalPages'] . "\n";
+echo "Total results: " . $result['totalResults'] . "\n";
+
+// Display results
+foreach ($result['results'] as $entry) {
+    echo $entry['primaryAccession'] . "\n";
+}
+
+// Build pagination links
+foreach ($result['pageLinks'] as $pageNum => $pageOffset) {
+    echo "Page $pageNum (offset: $pageOffset)\n";
+}
+```
+
+**Key points:**
+- Gets total count efficiently with one API call (`size=1`)
+- Only fetches results needed for the page (10, 20, or 50)
+- Returns pagination metadata (total pages, links, next/previous)
+- **Optimized for first 500 results** (pages 1-50 with size=10, pages 1-25 with size=20, etc.)
+- Pages beyond 500 return empty results (use automatic pagination via `search()` for beyond)
+
+**What gets returned:**
+
+```php
+[
+    'results' => [...],           // 10-50 entries for this page
+    'offset' => 0,                // Starting position
+    'pageSize' => 20,             // Results per page
+    'currentPage' => 1,           // Current page number
+    'totalPages' => 2042,         // Total available pages
+    'totalResults' => 20420,      // Total matching entries
+    'previousOffset' => null,     // Use for previous page link
+    'nextOffset' => 20,           // Use for next page link
+    'pageLinks' => [              // All page offsets
+        1 => 0,
+        2 => 20,
+        3 => 40,
+        // ...
+    ],
+    'hasNextPage' => true,
+    'hasPreviousPage' => false,
+]
+```
+
+**Performance:**
+- Pages 1-50 (offset 0-499): 2 API calls (count + fetch)
+- Pages > 50 (offset >= 500): Returns empty (not recommended for high offsets)
+
+For optimal performance with large result sets, use automatic pagination with `search()` and process results as they're retrieved.
+
+## Manual Iteration (Low-Level)
 
 ### First Page
 
@@ -106,53 +197,73 @@ Key pagination-related headers:
 
 ## Combining with Pagination
 
-### Page Size Selection
+### Page Size Selection (Max 500 per request)
+
+The UniProt API limits individual requests to **500 results max**. This is not a limitation because automatic pagination handles larger result sets seamlessly:
 
 ```php
-// Small pages - more requests
+// Recommended: Use max size (500) for efficiency
+// Reduces number of API requests while retrieving all results
 $results = $search->search(
     'organism_id:9606',
-    ['size' => 10]
+    ['size' => 500]  // Max allowed, recommended for large result sets
 );
 
-// Large pages - fewer requests, more memory
+foreach ($results as $entry) {
+    echo $entry['primaryAccession'] . "\n";  // Gets ALL results automatically
+}
+
+// Alternative: Smaller pages for lower memory usage
 $results = $search->search(
     'organism_id:9606',
-    ['size' => 500]  // max
+    ['size' => 100]  // Fewer results per request, but more requests needed
 );
 
-// Balanced
+// Alternative: Tiny pages for minimal memory (not recommended unless needed)
 $results = $search->search(
     'organism_id:9606',
-    ['size' => 100]
+    ['size' => 10]  // Very many requests, only use if memory is critical
 );
 ```
+
+**Size vs Requests Example for 22,400 results:**
+- `size=500` → 45 API requests (recommended)
+- `size=100` → 225 API requests
+- `size=10` → 2,240 API requests (avoid unless necessary)
 
 ### Stop Early
 
 ```php
-$results = $search->search('organism_id:9606', ['size' => 50]);
+$results = $search->search('organism_id:9606', ['size' => 500]);
 
 $count = 0;
 foreach ($results as $entry) {
     // Process entry
     
-    // Stop after 1000
+    // Stop after 1000 (doesn't fetch remaining pages)
     if (++$count >= 1000) {
         break;
     }
 }
+echo "Processed: $count entries\n";  // Prints 1000
 ```
 
-### Count Results
+### Real-Time Count During Iteration
 
 ```php
-// Simple iteration count
+$results = $search->search('organism_id:9606', ['size' => 500]);
+
 $count = 0;
+$startTime = time();
 foreach ($results as $entry) {
     $count++;
+    
+    // Show progress every 500
+    if ($count % 500 === 0) {
+        echo "Retrieved $count entries (" . (time() - $startTime) . "s)\n";
+    }
 }
-echo "Total: $count\n";
+echo "Total: $count entries\n";
 ```
 
 ## ID Mapping Pagination

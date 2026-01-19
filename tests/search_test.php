@@ -19,9 +19,13 @@ CurlClient::setVerifySSL(false);
 $result = null;
 $error = null;
 $query = 'organism_id:9606 AND reviewed:true';
+$offset = 0;
+$pageSize = 10;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['query'])) {
     $query = trim($_POST['query']);
+    $offset = isset($_POST['offset']) ? max(0, (int)$_POST['offset']) : 0;
+    $pageSize = isset($_POST['pageSize']) ? (int)$_POST['pageSize'] : 10;
     
     if (empty($query)) {
         $error = 'Please enter a search query';
@@ -29,7 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['query'])) {
         try {
             $httpClient = HttpClientFactory::create();
             $search = new UniProtSearch($httpClient);
-            $result = $search->getFirstPage($query, ['size' => 10]);
+            
+            // Use manual pagination with offset
+            $result = $search->getPaginatedResults($query, $offset, $pageSize);
+            
         } catch (UniProtException $e) {
             $error = $e->getMessage();
         } catch (Exception $e) {
@@ -361,6 +368,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['query'])) {
                 </div>
                 <div class="hint">💡 Use boolean operators: AND, OR, NOT. Field search: field_name:value</div>
                 
+                <div style="margin-top: 15px; padding: 15px; background: #f0f4ff; border-radius: 6px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">Results Per Page:</label>
+                    <div style="display: flex; gap: 20px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="pageSize" value="10" <?php echo ($pageSize === 10 ? 'checked' : ''); ?> style="margin-right: 8px;">
+                            <span>10 Results</span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="pageSize" value="20" <?php echo ($pageSize === 20 ? 'checked' : ''); ?> style="margin-right: 8px;">
+                            <span>20 Results</span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="pageSize" value="50" <?php echo ($pageSize === 50 ? 'checked' : ''); ?> style="margin-right: 8px;">
+                            <span>50 Results</span>
+                        </label>
+                    </div>
+                    <input type="hidden" name="offset" id="offsetInput" value="0">
+                </div>
+                
                 <div class="examples">
                     <button type="button" class="example-btn" onclick="setQuery('organism_id:9606 AND reviewed:true')">Human Proteins</button>
                     <button type="button" class="example-btn" onclick="setQuery('keyword:cancer')">Cancer Related</button>
@@ -418,6 +444,13 @@ if (isset($result['links']['next'])) {
         <?php endif; ?>
         
         <?php if ($result && isset($result['results'])): ?>
+            <!-- Pagination Info -->
+            <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                <strong>📊 Page <?php echo $result['currentPage']; ?> of <?php echo $result['totalPages']; ?></strong> 
+                | Showing <?php echo count($result['results']); ?> of <?php echo $result['totalResults']; ?> results
+                (Results <?php echo $result['offset'] + 1; ?>-<?php echo min($result['offset'] + $result['pageSize'], $result['totalResults']); ?>)
+            </div>
+            
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('table')">📊 Table View</button>
                 <button class="tab-btn" onclick="switchTab('list')">📋 List View</button>
@@ -425,10 +458,11 @@ if (isset($result['links']['next'])) {
             </div>
             
             <div id="table" class="tab-content active">
-                <h3>Search Results (<?php echo count($result['results']); ?> entries)</h3>
+                <h3>Search Results - Page <?php echo $result['currentPage']; ?></h3>
                 <table class="results-table">
                     <thead>
                         <tr>
+                            <th width="50">S.No.</th>
                             <th>Accession</th>
                             <th>Protein Name</th>
                             <th>Organism</th>
@@ -436,8 +470,11 @@ if (isset($result['links']['next'])) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($result['results'] as $entry): ?>
+                        <?php foreach ($result['results'] as $index => $entry): ?>
                         <tr>
+                            <td style="text-align: center; font-weight: 600;">
+                                <?php echo ($result['offset'] + $index + 1); ?>
+                            </td>
                             <td>
                                 <a href="entry_test.php?accession=<?php echo htmlspecialchars($entry['primaryAccession'] ?? ''); ?>" class="accession-link">
                                     <?php echo htmlspecialchars($entry['primaryAccession'] ?? 'N/A'); ?>
@@ -461,11 +498,11 @@ if (isset($result['links']['next'])) {
             </div>
             
             <div id="list" class="tab-content">
-                <h3>Search Results (<?php echo count($result['results']); ?> entries)</h3>
+                <h3>Search Results - Page <?php echo $result['currentPage']; ?></h3>
                 <div style="line-height: 1.8;">
                     <?php foreach ($result['results'] as $index => $entry): ?>
                     <div style="padding: 15px; background: #f9f9f9; margin-bottom: 10px; border-radius: 6px; border-left: 4px solid #667eea;">
-                        <strong><?php echo ($index + 1); ?>.</strong>
+                        <strong><?php echo ($result['offset'] + $index + 1); ?>.</strong>
                         <a href="entry_test.php?accession=<?php echo htmlspecialchars($entry['primaryAccession'] ?? ''); ?>" style="color: #667eea; text-decoration: none;">
                             <strong><?php echo htmlspecialchars($entry['primaryAccession'] ?? 'N/A'); ?></strong>
                         </a>
@@ -493,6 +530,71 @@ if (isset($result['links']['next'])) {
                     <pre><?php echo htmlspecialchars(json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></pre>
                 </div>
             </div>
+            
+            <!-- Pagination Navigation -->
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 6px; margin-top: 30px;">
+                <h4 style="margin-top: 0;">📄 Page Navigation</h4>
+                
+                <!-- Previous/Next Buttons -->
+                <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+                    <?php if ($result['hasPreviousPage']): ?>
+                        <form method="POST" style="display: inline;">
+                            <input type="hidden" name="query" value="<?php echo htmlspecialchars($query); ?>">
+                            <input type="hidden" name="offset" value="<?php echo $result['previousOffset']; ?>">
+                            <input type="hidden" name="pageSize" value="<?php echo $result['pageSize']; ?>">
+                            <button type="submit" style="padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                ← Previous Page
+                            </button>
+                        </form>
+                    <?php else: ?>
+                        <button disabled style="padding: 10px 15px; background: #ccc; color: #999; border: none; border-radius: 4px; cursor: not-allowed;">
+                            ← Previous Page
+                        </button>
+                    <?php endif; ?>
+                    
+                    <span style="padding: 10px 15px; background: white; border: 1px solid #ddd; border-radius: 4px; align-self: center;">
+                        Page <?php echo $result['currentPage']; ?> of <?php echo $result['totalPages']; ?>
+                    </span>
+                    
+                    <?php if ($result['hasNextPage']): ?>
+                        <form method="POST" style="display: inline;">
+                            <input type="hidden" name="query" value="<?php echo htmlspecialchars($query); ?>">
+                            <input type="hidden" name="offset" value="<?php echo $result['nextOffset']; ?>">
+                            <input type="hidden" name="pageSize" value="<?php echo $result['pageSize']; ?>">
+                            <button type="submit" style="padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                Next Page →
+                            </button>
+                        </form>
+                    <?php else: ?>
+                        <button disabled style="padding: 10px 15px; background: #ccc; color: #999; border: none; border-radius: 4px; cursor: not-allowed;">
+                            Next Page →
+                        </button>
+                    <?php endif; ?>
+                </div>
+                
+                <!-- All Pages Links -->
+                <div style="background: white; padding: 15px; border-radius: 4px;">
+                    <strong>Jump to Page:</strong>
+                    <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
+                        <?php foreach ($result['pageLinks'] as $pageNum => $pageOffset): ?>
+                            <?php if ($pageNum === $result['currentPage']): ?>
+                                <span style="padding: 8px 12px; background: #667eea; color: white; border-radius: 4px; font-weight: bold;">
+                                    <?php echo $pageNum; ?>
+                                </span>
+                            <?php else: ?>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="query" value="<?php echo htmlspecialchars($query); ?>">
+                                    <input type="hidden" name="offset" value="<?php echo $pageOffset; ?>">
+                                    <input type="hidden" name="pageSize" value="<?php echo $result['pageSize']; ?>">
+                                    <button type="submit" style="padding: 8px 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                                        <?php echo $pageNum; ?>
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
         <?php endif; ?>
     </div>
     
@@ -506,6 +608,7 @@ if (isset($result['links']['next'])) {
         
         function setQuery(q) {
             document.querySelector('input[name="query"]').value = q;
+            document.getElementById('offsetInput').value = 0;  // Reset to first page
             document.querySelector('form').submit();
         }
         

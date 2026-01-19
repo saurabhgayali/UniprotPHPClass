@@ -1,23 +1,24 @@
 <?php
+declare(strict_types=1);
 
 /**
  * Example 2: Search with Pagination
  * 
  * Shows how to search UniProtKB with complex queries and handle pagination.
- * Demonstrates the cursor-based pagination mechanism.
+ * Demonstrates both automatic cursor-based pagination and manual offset-based pagination.
+ * 
+ * Run from command line: php examples/search_entries.php
  */
 
-// Include the library
-require_once dirname(__DIR__) . '/src/Exception/UniProtException.php';
-require_once dirname(__DIR__) . '/src/Http/HttpClientInterface.php';
-require_once dirname(__DIR__) . '/src/Http/CurlClient.php';
-require_once dirname(__DIR__) . '/src/Http/StreamClient.php';
-require_once dirname(__DIR__) . '/src/Http/HttpClientFactory.php';
-require_once dirname(__DIR__) . '/src/UniProt/UniProtSearch.php';
+require_once dirname(__DIR__) . '/src/autoload.php';
 
 use UniProtPHP\Http\HttpClientFactory;
+use UniProtPHP\Http\CurlClient;
 use UniProtPHP\UniProt\UniProtSearch;
 use UniProtPHP\Exception\UniProtException;
+
+// Disable SSL verification for development/testing
+CurlClient::setVerifySSL(false);
 
 echo "=== UniProt Search with Pagination Example ===\n\n";
 
@@ -144,6 +145,51 @@ try {
         }
     }
     echo "\n";
+
+    // Example 7: Full pagination - retrieve ALL results (e.g., ~22,400 human proteins)
+    // This demonstrates automatic pagination for large result sets
+    echo "7. Full pagination example - ALL human reviewed proteins...\n";
+    echo "   ⚠️  NOTE: This will fetch ~22,400 results (45 requests of 500 each)\n";
+    echo "   Starting pagination (showing first 10 + last 10 results)...\n\n";
+    
+    $results = $search->search(
+        'organism_id:9606 AND reviewed:true',
+        ['size' => 500]  // Max allowed per request
+    );
+
+    $count = 0;
+    $firstResults = [];
+    $lastResults = [];
+    
+    foreach ($results as $entry) {
+        $count++;
+        
+        // Store first 10
+        if ($count <= 10) {
+            $firstResults[] = $entry['primaryAccession'];
+        }
+        
+        // Keep last 10 in memory
+        $lastResults[] = $entry['primaryAccession'];
+        if (count($lastResults) > 10) {
+            array_shift($lastResults);
+        }
+    }
+    
+    echo "   First 10 results:\n";
+    foreach ($firstResults as $i => $acc) {
+        echo "   " . ($i + 1) . ". $acc\n";
+    }
+    
+    echo "\n   ... [" . ($count - 20) . " results in between] ...\n\n";
+    
+    echo "   Last 10 results:\n";
+    foreach ($lastResults as $i => $acc) {
+        echo "   " . ($count - 9 + $i) . ". $acc\n";
+    }
+    
+    echo "\n   ✓ Total retrieved: $count entries\n";
+    echo "   ✓ Automatic cursor-based pagination completed!\n\n";
 
     echo "✓ All search examples completed successfully!\n";
 

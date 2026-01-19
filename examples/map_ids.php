@@ -1,23 +1,24 @@
 <?php
+declare(strict_types=1);
 
 /**
  * Example 3: ID Mapping
  * 
  * Shows how to submit ID mapping jobs, poll for completion,
  * and retrieve results using UniProt's async job model.
+ * 
+ * Run from command line: php examples/map_ids.php
  */
 
-// Include the library
-require_once dirname(__DIR__) . '/src/Exception/UniProtException.php';
-require_once dirname(__DIR__) . '/src/Http/HttpClientInterface.php';
-require_once dirname(__DIR__) . '/src/Http/CurlClient.php';
-require_once dirname(__DIR__) . '/src/Http/StreamClient.php';
-require_once dirname(__DIR__) . '/src/Http/HttpClientFactory.php';
-require_once dirname(__DIR__) . '/src/UniProt/UniProtIdMapping.php';
+require_once dirname(__DIR__) . '/src/autoload.php';
 
 use UniProtPHP\Http\HttpClientFactory;
+use UniProtPHP\Http\CurlClient;
 use UniProtPHP\UniProt\UniProtIdMapping;
 use UniProtPHP\Exception\UniProtException;
+
+// Disable SSL verification for development/testing
+CurlClient::setVerifySSL(false);
 
 echo "=== UniProt ID Mapping Example ===\n\n";
 

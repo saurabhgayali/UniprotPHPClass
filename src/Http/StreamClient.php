@@ -61,11 +61,12 @@ class StreamClient implements HttpClientInterface
             }
 
             $statusCode = $this->extractStatusCode($http_response_header ?? []);
+            $responseHeaders = $this->extractHeaders($http_response_header ?? []);
 
             return [
                 'status' => $statusCode,
                 'body' => $response,
-                'headers' => [],
+                'headers' => $responseHeaders,
             ];
         } catch (UniProtException $e) {
             throw $e;
@@ -197,6 +198,30 @@ class StreamClient implements HttpClientInterface
             }
         }
         return 200;
+    }
+
+    /**
+     * Extract response headers from header array
+     * 
+     * @param array<string> $headers
+     * @return array<string, string>
+     */
+    private function extractHeaders(array $headers): array
+    {
+        $responseHeaders = [];
+        foreach ($headers as $header) {
+            // Skip status line and empty headers
+            if (strpos($header, 'HTTP/') === 0 || empty(trim($header))) {
+                continue;
+            }
+            
+            // Parse header line
+            if (strpos($header, ':') !== false) {
+                [$name, $value] = explode(':', $header, 2);
+                $responseHeaders[strtolower(trim($name))] = trim($value);
+            }
+        }
+        return $responseHeaders;
     }
 
     /**
