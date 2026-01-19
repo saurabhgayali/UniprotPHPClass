@@ -4,6 +4,8 @@ A production-ready PHP library for programmatic access to the UniProt REST API.
 
 **Status:** Complete, tested, ready for production use.
 
+**License:** [MIT](LICENSE.md) - See [LICENSE.md](LICENSE.md) for full terms.
+
 ## Features
 
 - ✅ **Single Entry Retrieval** - Fetch individual protein entries by accession
